@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  server:
+    build: ./server
+    container_name: oqs-server
+    ports:
+      - "443:443"
+    networks:
+      - pqcnet
+
+  client:
+    build: ./client
+    container_name: oqs-client
+    depends_on:
+      - server
+    networks:
+      - pqcnet
+    entrypoint: ["sleep", "infinity"]
+
+networks:
+  pqcnet:
+    driver: bridge
