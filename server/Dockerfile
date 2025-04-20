@@ -1,45 +1,50 @@
-Last login: Sat Apr 19 21:34:42 on console
-fobaty@Macbook ~ % ssh jupiter
-Welcome to Ubuntu 24.10 (GNU/Linux 6.11.0-1007-raspi aarch64)
+# Use a minimal base image with required build tools
+FROM debian:bullseye-slim
 
- * Documentation:  https://help.ubuntu.com
- * Management:     https://landscape.canonical.com
- * Support:        https://ubuntu.com/pro
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV OQS_OPENSSL_DIR=/opt/oqs-openssl
 
- System information as of Sat Apr 19 21:42:18 PDT 2025
+# Install necessary dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    cmake \
+    ninja-build \
+    python3 \
+    python3-pip \
+    libssl-dev \
+    perl \
+    wget \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-  System load:           0.1
-  Usage of /:            28.2% of 57.97GB
-  Memory usage:          25%
-  Swap usage:            0%
-  Temperature:           52.6 C
-  Processes:             276
-  Users logged in:       1
-  IPv4 address for eth0: 192.168.1.100
-  IPv6 address for eth0: 2600:1700:5a6a:8210::2b
-  IPv6 address for eth0: 2600:1700:5a6a:8210:da3a:ddff:fe24:11b6
+# Install Python dependencies (if needed)
+RUN pip3 install --no-cache-dir cryptography
 
- * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
-   just raised the bar for easy, resilient and secure K8s cluster deployment.
+# Create a working directory
+WORKDIR /root
 
-   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+# Clone and build liboqs (Quantum-Safe Crypto library)
+RUN git clone --branch main https://github.com/open-quantum-safe/liboqs.git && \
+    cd liboqs && \
+    mkdir build && cd build && \
+    cmake -GNinja -DOQS_USE_OPENSSL=OFF -DCMAKE_INSTALL_PREFIX=/opt/liboqs .. && \
+    ninja && ninja install
 
-0 updates can be applied immediately.
-
-
-*** System restart required ***
-Last login: Sat Apr 19 16:31:14 2025 from 192.168.1.77
-pi@jupiter:~$ cd docker/
-composes/    influxdb/    pqc-testbed/ shatsys/     tig-stack/   traefik/
-pi@jupiter:~$ cd docker/pqc-testbed/
-pi@jupiter:~/docker/pqc-testbed$ cd server/
-pi@jupiter:~/docker/pqc-testbed/server$ nano Dockerfile 
-
-  GNU nano 8.1                       Dockerfile                                 
+# Clone and build OQS-OpenSSL with architecture-specific target
+RUN git clone --branch OQS-OpenSSL_1_1_1-stable https://github.com/open-quantum-safe/openssl.git >
+    cd openssl && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then TARGET="linux-aarch64"; \
+    elif [ "$ARCH" = "x86_64" ]; then TARGET="linux-x86_64"; \
+    else echo "Unsupported architecture: $ARCH" && exit 1; fi && \
+    ./Configure --prefix=$OQS_OPENSSL_DIR --openssldir=$OQS_OPENSSL_DIR $TARGET -lm && \
     make -j$(nproc) && make install && \
     # Create symlink for libssl if not already created by installer
     if [ -f "$OQS_OPENSSL_DIR/lib/libssl.so.1.1" ]; then \
-        ln -sf $OQS_OPENSSL_DIR/lib/libssl.so.1.1 $OQS_OPENSSL_DIR/lib/libssl.s>
+        ln -sf $OQS_OPENSSL_DIR/lib/libssl.so.1.1 $OQS_OPENSSL_DIR/lib/libssl.so; \
     fi
 
 # Add OpenSSL binary path to environment
